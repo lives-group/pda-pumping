@@ -1,0 +1,1047 @@
+% A Machine-Checked Formalization of the Pumping Lemma for Context-Free
+% Languages via Pushdown Automata -- LLNCS version.
+%
+\documentclass[runningheads]{llncs}
+%
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{fancyvrb}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\renewcommand\UrlFont{\color{blue}\rmfamily}
+\urlstyle{rm}
+
+%% -- Colour helpers ----------------------------------------------------------
+\newcommand{\blueFG}[1]{\textcolor[rgb]{0,0,0.8}{#1}}
+\newcommand{\redFG}[1]{\textcolor[rgb]{0.6,0,0}{#1}}
+\newcommand{\greenFG}[1]{\textcolor[rgb]{0,0.4,0}{#1}}
+\newcommand{\purpleFG}[1]{\textcolor[rgb]{0.4,0,0.4}{#1}}
+
+%% -- Semantic markup ---------------------------------------------------------
+\newcommand{\D}[1]{{\blueFG{\textsf{#1}}}}      % datatype / type constructor
+\newcommand{\Con}[1]{{\redFG{\textsf{#1}}}}     % data constructor
+\newcommand{\F}[1]{{\greenFG{\textsf{#1}}}}     % function / definition
+\newcommand{\V}[1]{{\purpleFG{\textit{#1}}}}    % variable / parameter
+\newcommand{\Kw}[1]{\textbf{#1}}                % keyword
+
+%% -- Math-in-text helpers ----------------------------------------------------
+\newcommand{\kto}{\ensuremath{\to}}
+\newcommand{\kuplus}{\ensuremath{\uplus}}
+\newcommand{\kfa}{\ensuremath{\forall}}
+\newcommand{\kneg}{\ensuremath{\neg}}
+\newcommand{\kin}{\ensuremath{\in}}
+\newcommand{\keq}{\ensuremath{\equiv}}
+\newcommand{\kvd}{\ensuremath{\vdash}}
+\newcommand{\kRa}{\ensuremath{\Longrightarrow}}
+\newcommand{\kRas}{\ensuremath{\Longrightarrow^{*}}}
+\newcommand{\kpda}{\ensuremath{\vdash_{\mathsf{p}}}}
+\newcommand{\kpRa}{\ensuremath{\Longrightarrow}}
+\newcommand{\kpRas}{\ensuremath{\Longrightarrow^{*}}}
+\newcommand{\ks}[1]{\ensuremath{_{#1}}}
+\newcommand{\kp}[1]{\ensuremath{^{#1}}}
+\newcommand{\kla}{\ensuremath{\lambda}}
+\newcommand{\kSigma}{\ensuremath{\Sigma}}
+\newcommand{\ka}{\ensuremath{\alpha}}
+\newcommand{\kb}{\ensuremath{\beta}}
+\newcommand{\kg}{\ensuremath{\gamma}}
+\newcommand{\kd}{\ensuremath{\delta}}
+\newcommand{\ksig}{\ensuremath{\sigma}}
+\newcommand{\kbot}{\ensuremath{\bot}}
+\newcommand{\knat}{\ensuremath{\mathbb{N}}}
+\newcommand{\kle}{\ensuremath{\le}}
+\newcommand{\klb}{\ensuremath{\lfloor}}
+\newcommand{\krb}{\ensuremath{\rfloor}}
+\newcommand{\ktimes}{\ensuremath{\times}}
+\newcommand{\kmonus}{\ensuremath{\mathbin{\dot{-}}}}
+\newcommand{\klt}{\ensuremath{<}}
+\newcommand{\kmaybe}{\ensuremath{\mathsf{Maybe}}}
+\newcommand{\AC}[1]{\texttt{#1}}
+
+%% -- Code block --------------------------------------------------------------
+\DefineVerbatimEnvironment{spec}{Verbatim}%
+{fontsize=\small,commandchars=\\\{\},xleftmargin=1em,
+frame=none,samepage=true}
+
+\begin{document}
+%
+\title{A Machine-Checked Formalization of the Pumping
+Lemma for Context-Free Languages via Pushdown Automata}
+%
+\titlerunning{Formalizing the Pumping Lemma via Pushdown Automata}
+%
+\author{Rodrigo Ribeiro\orcidID{0000-0003-0131-5234}}
+%
+\authorrunning{R. Ribeiro}
+%
+\institute{Departamento de Computa\c{c}\~{a}o, Universidade Federal
+  de Ouro Preto,
+  Ouro Preto, MG, Brazil \\
+\email{rodrigo.ribeiro@ufop.edu.br}}
+%
+\maketitle
+%
+\begin{abstract}
+  We present a machine-checked formalization, in the dependently typed language
+  Agda, of the pumping lemma for context-free languages by the
+  pushdown-automata route: a sufficiently long word accepted by empty stack
+  drives the stack through a repeated configuration or to a great height, and in
+  both cases the accepting computation is cut into segments that pump. The
+  theorem is stated purely about an \emph{arbitrary} pushdown automaton and its
+  empty-stack language; grammars are never mentioned. Two ingredients are
+  central: a normalization procedure which ensures that
+  every step changes the stack height by one, preserving the whole language, the
+  empty word included; and a well-founded recursion on the computation length
+  that secures a non-empty pumped factor.
+\end{abstract}
+\keywords{Pumping lemma \and Pushdown automata \and Context-free
+  languages \and Formal verification \and Agda \and Dependent types \and
+Well-founded recursion.}
+%
+%%---------------------------------------------------------------------------
+\section{Introduction}\label{sec:intro}
+%%---------------------------------------------------------------------------
+
+The pumping lemma for context-free languages (CFLs) is the standard tool for
+proving a language \emph{not} context-free. It says that every CFL $L$ has a
+constant $p$ such that any word $w \in L$ with $|w| > p$ factors as
+$w = u\,v\,x\,y\,z$ with $|v\,y| \geq 1$ and $u\,v^{k}\,x\,y^{k}\,z \in L$ for
+every $k \geq 0$. The textbook proof~\cite{hopcroft06,sipser13}, due to
+Bar-Hillel, Perles, and Shamir~\cite{BarHillel61}, fixes a grammar in Chomsky
+Normal Form and argues on parse trees: a tall enough tree has a root-to-leaf path
+repeating a non-terminal, and the subtree at the repetition is what pumps.
+
+A second, less commonly taught route proves the same statement through
+\emph{pushdown automata} (PDAs)~\cite{Amarilli12}. The object it argues about is
+the \emph{stack profile} of a computation: the sequence of stack \emph{heights}
+recorded at each position along the run, from the single symbol present at the
+start down to the empty stack at the end. It discards state, input, and the
+contents of the stack, keeping only how tall the stack is over time, so that a
+computation becomes a path of integers, one whose consecutive values, in the
+normal form we use, differ by exactly one. For a PDA accepting by empty
+stack in such a normal form, the stack profile of a long accepting computation
+behaves in one of two ways. Either the stack stays low and the
+computation repeats a configuration, having visited more of them than exist, and so
+gives a single loop to iterate; or it climbs high, so two levels are crossed by matching
+``surface'' configurations, giving \emph{two} synchronized loops, one growing and
+one shrinking the stack, pumped together. The first case yields a single loop,
+which we record as $v$, taking $y = \varepsilon$; the second yields the full
+$u\,v\,x\,y\,z$ shape. The argument is geometric and never leaves
+the world of stacks and computations.
+
+This paper reports a complete, machine-checked formalization of the PDA route in
+Agda~\cite{Wadler22}, shaped by two design decisions. \emph{The statement is
+about a bare automaton:} we phrase the lemma for the empty-stack language of an
+\emph{arbitrary} PDA over finite alphabets, never mentioning grammars in
+hypothesis or conclusion. Since every CFL is the empty-stack language of some
+PDA, this is the pumping lemma for CFLs, kept entirely inside automata theory.
+\emph{Normalization is automaton-to-automaton and language-exact:} the
+combinatorics of the stack profile only work when consecutive heights differ by
+one. An arbitrary PDA replaces the popped top symbol by a string $\beta$ of any
+length, so a single step changes the height by $|\beta| - 1$: it falls by one,
+stays put, or rises by an arbitrary amount. Such a profile offers no structure
+to argue about.
+We therefore first convert $M$ into an equivalent automaton whose every step
+changes the stack height by one, and run the geometric argument there. Because
+the theorem must speak about the original $M$, such conversion ensures that
+the argument will hold for any context-free language.
+
+Our contributions are the following.
+\begin{itemize}
+    \item We give a direct PDA-to-PDA normalization turning an arbitrary automaton
+    into one whose every step changes the stack height by $\pm 1$, preserving the
+    full language, $\varepsilon$ included (Section~\ref{sec:normalization}).
+    \item We formalize pushdown automata, their empty-stack acceptance, and that
+    $\pm 1$ normal form, together with the geometry of stack profiles: a discrete
+    intermediate-value theorem, the last- and first-crossing positions of a stack
+    level, and a pigeonhole over \emph{surface configurations} that produces the two
+    cases of the argument (Sections~\ref{sec:setup} and~\ref{sec:geometry}).
+    \item We give the two pumping reconstructions as total functions: a single-loop
+    pump for the low-stack case and a synchronized double pump for the high-stack
+    case, each producing, for every $k$, an accepting computation of the pumped word
+    (Section~\ref{sec:pipeline}).
+\end{itemize}
+
+The rest of the paper is organized as follows.
+Section~\ref{sec:setup} introduces Agda, pushdown automata, empty-stack
+acceptance, and the $\pm 1$ normal form. Section~\ref{sec:overview} gives an
+overview of the formalization, showing how its two halves compose into the final
+theorem. Section~\ref{sec:normalization} details the normalization of an
+arbitrary automaton. Section~\ref{sec:geometry} develops the geometry of stack
+profiles. Section~\ref{sec:pipeline} assembles the two pumping reconstructions,
+the well-founded non-emptiness argument, and the end-to-end theorem.
+Section~\ref{sec:related} discusses related work and
+Section~\ref{sec:conclusion} concludes. Proofs are collected in
+Appendix~\ref{app:proofs}.
+
+%%---------------------------------------------------------------------------
+\section{Background}\label{sec:setup}
+%%---------------------------------------------------------------------------
+
+\subsection{An Overview of the Agda Programming Language}
+
+Agda is a dependently typed functional language in the tradition of
+Martin-L\"{o}f type theory~\cite{Lof84}. Through the Curry-Howard
+correspondence~\cite{Howard80} its types double as propositions and its programs
+as proofs, so to establish a theorem is to construct an inhabitant of the type
+that encodes it. There is no separate proof calculus: a proof is an ordinary
+total function, and an appeal to the induction hypothesis is just a recursive
+call.
+
+A small example fixes the notation. Lists, which carry the words, inputs, and
+stacks of the whole development, form an inductive type with an empty list and a
+cons, and their concatenation recurses structurally on the left argument:
+\begin{spec}
+\Kw{data} \D{List} (\V{A} : \D{Set}) : \D{Set} \Kw{where}
+   \Con{[]}   : \D{List} \V{A}
+   \F{\_::\_} : \V{A} \kto{} \D{List} \V{A} \kto{} \D{List} \V{A}
+
+\F{\_++\_} : \D{List} \V{A} \kto{} \D{List} \V{A} \kto{} \D{List} \V{A}
+\Con{[]} \F{++} \V{ys} = \V{ys}
+(\V{x} :: \V{xs}) \F{++} \V{ys} = \V{x} :: (\V{xs} \F{++} \V{ys})
+\end{spec}
+The type $\D{Maybe}\;\V{A}$ is equally pervasive. It has two constructors:
+$\Con{nothing}$, which carries no value, and $\Con{just}\;\V{a}$, which carries a
+single value of type $\V{A}$.
+
+A propositional equality is itself a type, and to prove one is to write a total
+function into it. That the empty list is a right unit for concatenation, for
+instance, is established by induction on the left list:
+\begin{spec}
+\F{++-idr} : \kfa{} \{\V{A} : \D{Set}\} (\V{xs} : \D{List} \V{A}) \kto{} \V{xs} \F{++} \Con{[]} \keq{} \V{xs}
+\F{++-idr} \Con{[]} = \Con{refl}
+\F{++-idr} (\V{x} :: \V{xs}) = \F{cong} (\V{x} ::\_) (\F{++-idr} \V{xs})
+\end{spec}
+In the base case \AC{\Con{[]}~\F{++}~\Con{[]}} reduces to \Con{[]} by definition,
+so \Con{refl} closes the goal; in the step case the induction hypothesis
+\AC{\F{++-idr}~\V{xs}} is transported under the cons by \F{cong}. This pairing of
+pattern matching on the shape of the data with recursive calls that stand for the
+induction hypothesis is the shape of essentially every definition and proof that
+follows.
+
+Not all of our recursions decrease structurally; several shrink a numeric measure
+instead. For those we lean on the accessibility predicate \D{Acc} of the standard
+library:
+\begin{spec}
+\Kw{data} \D{Acc} (\V{R} : \V{A} \kto{} \V{A} \kto{} \D{Set})(\V{x} : \V{A}) : \D{Set} \Kw{where}
+   \Con{acc} : ((\V{y} : \V{A}) \kto{} \V{R} \V{y} \V{x} \kto{} \D{Acc} \V{R} \V{y}) \kto{} \D{Acc} \V{R} \V{x}
+\end{spec}
+An element is accessible once everything strictly below it already is, and a
+relation is \emph{well-founded} when all of its elements are accessible. A
+function written by well-founded recursion matches on a certificate
+\AC{\Con{acc}~\V{rs}} and reads off, from \V{rs} applied to a proof that $y$ lies
+below $x$, the certificate for $y$ that authorizes the recursive call; as that
+certificate is a structural sub-term of \AC{\Con{acc}~\V{rs}}, the termination
+checker needs no further convincing. We use this scheme with the library's
+\F{<-wellFounded} and take the \emph{length of an accepting computation} as the
+measure, the recursion that underlies the non-emptiness argument of
+Section~\ref{sec:vy}.
+
+One last feature we rely on concerns performance rather than logic. To decide
+whether two types are equal the checker \emph{normalizes} terms, unfolding
+definitions along the way; by default every definition is \emph{transparent} and
+may be unfolded at each of its uses. When a definition has a large normal form yet
+its consumers depend on it only through its \emph{type}, this repeated unfolding is
+wasted work. An \Kw{opaque} block seals a definition against it: inside the block
+the definition computes as usual, but outside it the checker sees only the type
+signature and treats the body as inert, like a postulate.
+\begin{spec}
+\Kw{opaque}
+   \F{lemma} : \V{P}
+   \F{lemma} = \F{build} \V{args}         -- large, slow-to-normalise normal form
+
+\F{use} : \V{Q}
+\F{use} = \F{consume} \F{lemma}
+\end{spec}
+Elaborating \F{use} then consults only the type \V{P} of \F{lemma}, never its
+body, so it type-checks without normalising the expensive term. An \Kw{unfolding}
+declaration can still expose the body at a chosen site, making opacity a local,
+reversible discipline rather than a permanent abstraction barrier. This is the
+lever that keeps the costliest part of our development in check: the high-stack
+case (Section~\ref{sec:high}) hands back its witnesses inside a record, and
+sealing the function that assembles it stops every module downstream from
+rebuilding that construction just to read one of its fields, a point we return to
+in Section~\ref{sec:conclusion}.
+
+We point the reader to~\cite{Wadler22} for a fuller account
+of Agda.
+
+\subsection{Pushdown Automata and Acceptance}\label{sec:pda}
+
+We fix three types $Q$, $T$, and $\Gamma$ for states, input symbols, and stack
+symbols. A pushdown automaton is a record bundling a transition function, an
+initial state, an initial stack symbol, and a set of final states: 
+\begin{spec}
+\Kw{record} \D{PDA} (\V{Q} \V{T} \V{\kg{}} : \D{Set}) : \D{Set} \Kw{where}
+   \Kw{field}
+      \F{\kd{}} : \V{Q} \kto{} \D{Maybe} \V{T} \kto{} \V{\kg{}} \kto{} \D{List} (\V{Q} \ktimes{} \D{List} \V{\kg{}})
+      \F{q\ks{0}} : \V{Q}
+      \F{z\ks{0}} : \V{\kg{}}
+      \F{isFinal} : \V{Q} \kto{} \D{Bool}
+\end{spec}
+The transition function takes a state, an \emph{optional} input symbol
+(\AC{\Con{nothing}} marks an $\varepsilon$-move, which reads no input), and the
+stack symbol on top; it returns a list of alternatives, each a target state
+paired with the string $\beta$ that replaces the popped top symbol. The
+nondeterminism is the choice of an alternative from this list. A
+\emph{configuration}, denoted by type $\D{Conf}\:\V{Q}\:\V{T}\:\V{\kg{}}$, is a
+triple of current state, remaining input, and stack. 
+Transitions between configurations are denoted by the following type: 
+\begin{spec}
+\Kw{data} \D{\_\kpda{}\_\kpRa{}\_} (\V{M} : \D{PDA} \V{Q} \V{T} \V{\kg{}}) : \D{Conf} \V{Q} \V{T} \V{\kg{}} \kto{} \D{Conf} \V{Q} \V{T} \V{\kg{}} \kto{} \D{Set} \Kw{where}
+   \Con{read} : (\V{r} , \V{\kb{}}) \kin{} \V{M} \F{.\kd{}} \V{q} (\Con{just} \V{a}) \V{A} \kto{}
+          \V{M} \kpda{} (\V{q} , \V{a} :: \V{w} , \V{A} :: \V{\kg{}}) \kpRa{} (\V{r} , \V{w} , \V{\kb{}} ++ \V{\kg{}})
+   \Con{eps}  : (\V{r} , \V{\kb{}}) \kin{} \V{M} \F{.\kd{}} \V{q} \Con{nothing}  \V{A} \kto{}
+          \V{M} \kpda{} (\V{q} , \V{w} , \V{A} :: \V{\kg{}}) \kpRa{} (\V{r} , \V{w} , \V{\kb{}} ++ \V{\kg{}})
+\end{spec}
+The \Con{read} step consumes the leading input symbol $a$; the \Con{eps} step
+leaves the input untouched. Both require the top of the stack to be some $A$,
+which they replace by $\beta$, so the new stack is $\beta \mathbin{+\!+} \gamma$.
+The reflexive-transitive closure \D{\_\kpda{}\_\kpRas{}\_} is the usual multi-step
+relation, built from an empty computation \Con{\ensuremath{\varepsilon}} and a
+cons \AC{\_\Con{\ensuremath{\triangleleft}}\_} of a step onto a computation; we
+write \F{compLen} for the number of steps in a computation, defined by structural
+recursion. A word $w$ is accepted \emph{by empty stack} when, started from
+$\F{q}_0$ with the single symbol $\F{z}_0$ on the stack, the automaton can consume
+all of $w$ and empty its stack:\footnote{The operator \kSigma{} below is Agda's
+dependent pair. Under the Curry-Howard correspondence it is the \emph{existential
+quantifier}: an inhabitant is a witness paired with a proof about that witness.
+We write \AC{\kSigma{}[ \V{x} ]~\V{P}} for the common case in which the type of
+the witness can be inferred.}
+\begin{spec}
+\F{AccES} : \D{PDA} \V{Q} \V{T} \V{\kg{}} \kto{} \D{List} \V{T} \kto{} \D{Set}
+\F{AccES} \V{M} \V{w}
+    = \D{\kSigma{}} \kla{} (\V{q} : \V{Q}) \kto{} \V{M} \kpda{} (\V{M} \F{.q\ks{0}} , \V{w} , \V{M} \F{.z\ks{0}} :: []) \kpRas{} (\V{q} , [] , [])
+\end{spec}
+The final state is irrelevant: acceptance is the existence of \emph{some} state
+$q$ in which the input is exhausted and the stack is empty. We write
+\[
+L(M) \;=\; \{\,w \mid \F{AccES}\;M\;w\,\}
+\]
+for the language of $M$, and it is this language that the pumping lemma will
+speak about.
+
+%%---------------------------------------------------------------------------
+\section{An Overview of the Formalization}\label{sec:overview}
+%%---------------------------------------------------------------------------
+
+The pumping lemma is ordinarily read as an implication to be proved. Read
+constructively it is an object to be built, and it is worth being precise about
+which one. From an arbitrary automaton $M$ the development must produce a number
+$p$; and then, for every word $w$ accepted by $M$ with $p < |w|$, a split of $w$
+into five factors, a proof that the middle two are not both empty, and, for
+every $k$, an accepting computation of $u\,v^{k}\,x\,y^{k}\,z$. None of these is
+a mere existence claim: each is a value that an Agda function computes from the
+accepting computation it is handed. The sections that follow are the stages of
+that computation.
+
+Neither half carries the statement alone. The geometric argument needs
+consecutive heights to differ by exactly one; the obstacle is not that it would
+be hard to prove about an arbitrary $M$, but that it cannot even be
+\emph{stated} about one, since the positions it names need not exist.
+Normalization, conversely, proves nothing about pumping. The theorem is the
+composite, and it needs the language equivalence in \emph{both} directions,
+forward for $w$ and backward for each of the infinitely many pumped words, and
+it needs that equivalence to hold for $\varepsilon$.
+
+A single invocation of the final theorem runs through four movements,
+\[
+M \;\xrightarrow{\ \text{normalize}\ }\; M'
+  \;\xrightarrow{\ \text{profile},\ \text{pigeonhole}\ }\; \text{loops}
+  \;\xrightarrow{\ \text{replay}\ }\; u\,v^{k}x\,y^{k}z
+  \;\xrightarrow{\ \text{transport}\ }\; M ,
+\]
+which the rest of the paper carries out in order. The automaton $M$ is
+normalized to an $M'$ over the extended stack alphabet $\kmaybe\,\Gamma$,
+accepting the same language (Section~\ref{sec:normalization}). An accepted word
+$w$ is transported to $M'$ and the stack profile of the resulting computation is
+read off, together with its highest point (Section~\ref{sec:geometry}). The
+argument branches on that peak: below a threshold a pigeonhole over full
+configurations applies, above it one over \emph{surface} configurations, and
+either branch yields loops whose $k$-fold replay rebuilds an accepting
+computation of the pumped word (Sections~\ref{sec:loops} to~\ref{sec:high}). A
+loop that consumes no input is handled instead by a well-founded recursion on
+computation length, which is what secures $|v\,y| \geq 1$
+(Section~\ref{sec:vy}). Each pumped word is finally transported back to $M$
+(Section~\ref{sec:end}).
+
+Two decisions shape the rest: the normalization targets the weaker of two
+candidate normal forms (Section~\ref{sec:normalplus} says why), and the pumping
+length is computed from the alphabets of $M'$, not of $M$
+(Section~\ref{sec:end}).
+
+%%---------------------------------------------------------------------------
+\section{Normalizing an Arbitrary Pushdown Automaton}\label{sec:normalization}
+%%---------------------------------------------------------------------------
+
+The geometric argument of Sections~\ref{sec:geometry} and~\ref{sec:pipeline} runs
+only on automata whose every step moves the stack by one. This section defines
+that discipline and then builds, from an arbitrary PDA, an equivalent automaton
+that obeys it.
+
+\subsection{The $\pm 1$ Normal Form}\label{sec:normal}
+
+We call a PDA \emph{normal} when every transition either pushes nothing,
+shrinking the stack by one, or pushes a single new symbol on top of the restored
+old top, growing it by one.\footnote{The operator \kuplus{} below is Agda's
+disjoint sum of types. Under the Curry-Howard correspondence it is the logical
+connective \emph{or}: an inhabitant is a proof of one of the two disjuncts,
+carrying a tag that records which of them was proved. That tag is what lets a
+consumer branch on the two cases, as \F{normal-step} does just below.}
+\begin{spec}
+\F{IsNormalPDA} : \D{PDA} \V{Q} \V{T} \V{\kg{}} \kto{} \D{Set}
+\F{IsNormalPDA} \V{M} = \kfa{} (\V{q} : \V{Q}) (\V{mt} : \D{Maybe} \V{T}) (\V{A} : \V{\kg{}}) \{\V{r}\} \{\V{\kb{}}\}
+   \kto{} (\V{r} , \V{\kb{}}) \kin{} \V{M} \F{.\kd{}} \V{q} \V{mt} \V{A} \kto{} \V{\kb{}} \keq{} [] \kuplus{} \D{\kSigma{}} \kla{} \V{X} \kto{} \V{\kb{}} \keq{} \V{X} :: \V{A} :: []
+\end{spec}
+The clause $\beta \equiv X :: A :: []$ says a push restores the popped symbol $A$
+and stacks a single $X$ above it, so nothing below the top is ever disturbed in a
+single step. From this it is immediate that each step is a \emph{pop} or a
+\emph{push} on the stack, abstracting away state and input:
+\begin{spec}
+\Kw{data} \D{StackStep} : \D{List} \V{\kg{}} \kto{} \D{List} \V{\kg{}} \kto{} \D{Set} \Kw{where}
+   \Con{pop} : \D{StackStep} (\V{A} :: \V{\kg{}}) \V{\kg{}}
+   \Con{push} : \D{StackStep} (\V{A} :: \V{\kg{}}) (\V{X} :: \V{A} :: \V{\kg{}})
+\end{spec}
+The lemma \F{normal-step} turns any step of a normal automaton into a
+\D{StackStep} by branching on which disjunct of \F{IsNormalPDA} the transition
+satisfies. The height change is then read off the \D{StackStep} alone:
+\begin{spec}
+\F{stackStep-\ensuremath{\pm}1} : \D{StackStep} \V{s} \V{s'}
+   \kto{} (\F{length} \V{s} \keq{} \Con{suc} (\F{length} \V{s'})) \kuplus{} (\F{length} \V{s'} \keq{} \Con{suc} (\F{length} \V{s}))
+\F{stackStep-\ensuremath{\pm}1} \Con{pop}  = \Con{inj\ks{1}} \Con{refl}
+\F{stackStep-\ensuremath{\pm}1} \Con{push} = \Con{inj\ks{2}} \Con{refl}
+\end{spec}
+Both cases are \Con{refl}, and that is the point: the indices of \Con{pop} and
+\Con{push} are literally $A :: \gamma$ against $\gamma$, and $A :: \gamma$
+against $X :: A :: \gamma$, so each length equation holds by computation, with no
+arithmetic to discharge. The $\pm 1$ discipline has no content beyond the shape
+of those two indices, and it is exactly what turns a computation into a path of
+integers whose consecutive values differ by one (Section~\ref{sec:geometry}).
+The other structural fact we take from \Con{push}, used pervasively in
+Sections~\ref{sec:geometry} and~\ref{sec:pipeline}, is that it leaves the entire
+tail of the stack untouched, so a segment of computation that never descends to a
+given depth keeps everything at and below that depth as an invariant suffix.
+
+What the construction must deliver is now fixed by the use made of it: an $M'$
+satisfying \F{IsNormalPDA}, over a state type that is still finite (the
+pigeonhole of Section~\ref{sec:geometry} counts configurations of $M'$), and a
+language equivalence holding for every word, the empty one included. Finiteness
+is taken in the constructive sense of a listing of the elements together with a
+proof that it is exhaustive, written \F{Finite} in the signatures below.
+Theorem~\ref{thm:normalize} below states that contract, and a first reading needs
+nothing else from this section.
+
+\subsection{A Stronger Form, and Why We Cannot Target It}\label{sec:normalplus}
+
+There is also a stronger normal form, in which the polarity of a step is fixed by
+whether it reads input:
+\begin{spec}
+\Kw{record} \D{IsNormalPDA\kp{+}} (\V{M} : \D{PDA} \V{Q} \V{T} \V{\kg{}}) : \D{Set} \Kw{where}
+   \Kw{field}
+      \F{read-pops}  : (\V{r} , \V{\kb{}}) \kin{} \V{M} \F{.\kd{}} \V{q} (\Con{just} \V{a}) \V{A} \kto{} \V{\kb{}} \keq{} []
+      \F{eps-pushes} : (\V{r} , \V{\kb{}}) \kin{} \V{M} \F{.\kd{}} \V{q} \Con{nothing} \V{A} \kto{}
+                  \D{\kSigma{}} \kla{} \V{X} \kto{} \V{\kb{}} \keq{} \V{X} :: \V{A} :: []
+\end{spec}
+Every \D{IsNormalPDA\kp{+}} automaton is normal, i.e. $\D{IsNormalPDA\kp{+}}\to \D{IsNormalPDA}$. 
+The strengthening matters for the empty word. In an \D{IsNormalPDA\kp{+}}
+automaton, every read pops and every $\varepsilon$-move pushes, so emptying a
+stack that starts at height one requires the number of reads to exceed the number
+of $\varepsilon$-moves by exactly one; since the reads consume the input, an
+accepted word has length at least one. \emph{No \D{IsNormalPDA\kp{+}} automaton
+accepts $\varepsilon$ by empty stack.} Consequently a normalization that is to
+preserve the full language of an automaton accepting $\varepsilon$ \emph{cannot}
+target \D{IsNormalPDA\kp{+}}; it must target the weaker \D{IsNormalPDA}, where a
+height-decreasing step may be an $\varepsilon$-move and $\varepsilon$ may be
+accepted. This is why the construction below empties the stack by an
+$\varepsilon$-move, and it is the reason the non-emptiness of the pumped factor
+will need a separate argument (Section~\ref{sec:vy}).
+
+The stronger form is not thereby discarded, and the development keeps both
+theorems from a single geometric core. The high-case reconstruction
+(Section~\ref{sec:high}) is carried out once, under the weaker hypothesis, and
+the proof that $|v\,y| \geq 1$ travels with its result as a \emph{function
+awaiting} an \D{IsNormalPDA\kp{+}} witness: it is discharged by the counting
+argument just given, but only once such a witness is supplied. A caller holding
+one applies it and gets the bound for free; the arbitrary-automaton path leaves
+it unapplied, because its normalized automaton has none, and pays for the bound
+with the well-founded recursion instead.
+
+\subsection{The Construction}\label{sec:construction}
+
+Two obstacles separate an arbitrary $M$ from the $\pm 1$ discipline: a transition
+may push a string $\beta$ of any length, not just zero or one symbol, and the
+automaton may inspect or empty its initial stack symbol $\F{z}_0$ in ways the
+discipline forbids. We remove both by extending the stack alphabet and adding a
+small set of bookkeeping states.
+
+Write $\bot$ for \Con{nothing} and $\widehat{A}$ for $\Con{just}\,A$. Since the
+construction slices one transition of $\delta$ into several unit steps, the
+bookkeeping states have to be indexed by the transition being sliced: we let
+$\tau$ range over the transitions of $M$, where $\tau$ is given by a state $q$,
+an optional input symbol $\mathit{mt}$, a top symbol $A$ and a choice of
+$(r,\beta) \in \delta\,q\,\mathit{mt}\,A$, and we write $\beta_\tau$ for the
+string that $\tau$ pushes. The normalized automaton $M'$ is then
+\[
+\Gamma' = \kmaybe\,\Gamma,
+\qquad
+\F{z}_0' = \bot,
+\qquad
+Q' = \{\iota\}
+   \cup \{\langle q\rangle\}_{q \in Q}
+   \cup \{\langle \tau\rangle\}_{\tau}
+   \cup \{\langle \tau,j\rangle\}_{1 \leq j < |\beta_\tau|},
+\]
+with a stack $A_1 \cdots A_n$ of $M$ encoded as
+$\widehat{A_1} \cdots \widehat{A_n}\,\bot$. Its transitions, for every
+$(r,\beta) \in \delta\,q\,\mathit{mt}\,A$ with $\beta = B_1 \cdots B_k$, writing
+$\tau$ for that transition, are
+\[
+\begin{array}{r@{\;\ni\;}l@{\qquad}l}
+\delta'(\iota, \varepsilon, \bot)
+  & (\langle \F{q}_0\rangle,\; \widehat{\F{z}_0}\,\bot) & \\[2pt]
+\delta'(\langle q\rangle, \mathit{mt}, \widehat{A})
+  & (n_0,\; \varepsilon)
+  & n_0 = \langle r\rangle \text{ if } k = 0, \text{ else } \langle \tau\rangle \\[2pt]
+\delta'(\langle \tau\rangle, \varepsilon, C)
+  & (n_k,\; \widehat{B_k}\,C)
+  & n_k = \langle r\rangle \text{ if } k = 1, \text{ else } \langle \tau,k-1\rangle \\[2pt]
+\delta'(\langle \tau,j\rangle, \varepsilon, C)
+  & (n_j,\; \widehat{B_j}\,C)
+  & n_j = \langle r\rangle \text{ if } j = 1, \text{ else } \langle \tau,j-1\rangle \\[2pt]
+\delta'(\langle q\rangle, \varepsilon, \bot)
+  & (\langle q\rangle,\; \varepsilon) &
+\end{array}
+\]
+
+The first rule installs the encoded initial stack. The second turns $\tau$ into a
+pop of the encoded top symbol, reading an input symbol exactly when
+$\mathit{mt}$ is one, and branches on $k$: an empty push string ends the macro at
+once, otherwise control passes to the push chain. The third and fourth rules run
+that chain, stacking the symbols of $\beta$ in reverse so that $B_1$ ends on top,
+each of them restoring the symbol beneath and so a legal $\pm 1$ push. A macro
+therefore replaces $\widehat{A}$ by $\widehat{B_1} \cdots \widehat{B_k}$, exactly
+what $\tau$ does, while every individual step is a $\pm 1$ pop or push. The last
+rule pops the marker, emptying the stack; this is the step that lets $M'$ accept
+the empty word, and the one \D{IsNormalPDA\kp{+}} would forbid
+(Section~\ref{sec:normalplus}). The resulting automaton is normal by
+construction.
+
+Two details of $Q'$ are worth pausing on. The families $\langle \tau\rangle$ and
+$\langle \tau,j\rangle$ are kept apart because $n_0$ is chosen by branching on
+$k$, a plain natural number, at a point where $k$ may still be zero and no
+position into $\beta$ can be formed. And $Q'$ is finite as soon as $Q$, $\Gamma$
+\emph{and} $T$ are, the last because $\tau$ records the optional input symbol;
+finiteness of $T$ is a mild and standard assumption, and it is what keeps the
+pigeonhole of Section~\ref{sec:geometry} available on the normalized automaton.
+
+That $M'$ is normal is immediate from the shape of the five rules. What the rest
+of the paper needs from it is the following.
+
+\begin{theorem}[\F{normalize}]\label{thm:normalize}
+Let $M$ be a pushdown automaton over finite $Q$, $T$ and $\Gamma$. The automaton
+$M'$ above is normal, its state type is finite, and $L(M') = L(M)$.
+\end{theorem}
+
+% The equivalence is stated for \emph{every} word, the empty one included, which is
+% stronger than the argument of Section~\ref{sec:pipeline} strictly needs. Its
+% proof is sketched in Appendix~\ref{app:proofs}. In Agda the three conclusions and
+% the two data they quantify over are packaged as a single dependent record:
+% \begin{spec}
+% \F{normalize} : \D{\kSigma{}} \kla{} (\V{State'} : \D{Set}) \kto{}
+%    \D{\kSigma{}} \kla{} (\V{M''} : \D{PDA} \V{State'} \V{T} (\D{Maybe} \V{\kg{}})) \kto{}
+%    \F{IsNormalPDA} \V{M''} \ktimes{} \F{Finite} \V{State'}
+%    \ktimes{} (\kfa{} \V{w} \kto{} \F{AccES} \V{M''} \V{w} \kto{} \F{AccES} \V{M} \V{w})
+%    \ktimes{} (\kfa{} \V{w} \kto{} \F{AccES} \V{M} \V{w} \kto{} \F{AccES} \V{M''} \V{w})
+% \end{spec}
+
+%%---------------------------------------------------------------------------
+\section{The Geometry of Stack Profiles}\label{sec:geometry}
+%%---------------------------------------------------------------------------
+
+Fix a normal automaton $M$ (the $M'$ just constructed, or any other; nothing
+below depends on where it came from) and an accepting computation
+$d : M \kpda{} (\F{q}_0 , w , \F{z}_0 :: []) \kpRas{} (q , [] , [])$ of length
+$m = \F{compLen}\;d$. Indexing positions $0,\dots,m$ along $d$, we write
+$\F{configAt}\;k\;d$ for the configuration reached after $k$ steps,
+$\F{stackAt}\;k\;d$ for its stack, and
+$
+\F{s}_{\mathsf h}\;k\;d \;\triangleq\; \F{length}\,(\F{stackAt}\;k\;d)
+$
+for the \emph{stack height} at position $k$; these are projections of an
+auxiliary \F{splitAt} that cuts $d$ at position $k$ into a prefix and a suffix
+and is the workhorse for all segment surgery. The height profile starts at
+$\F{s}_{\mathsf h}\,0\,d = 1$ (the lone symbol $\F{z}_0$) and ends at
+$\F{s}_{\mathsf h}\,m\,d = 0$ (the empty stack), and by \F{stackStep-\ensuremath{\pm}1}
+consecutive heights differ by one. We also write $\F{consumed}\;d$ for the input
+read along $d$; for an accepting computation $\F{consumed}\;d = w$, which
+underlies the factorization of $w$ into the segments below.
+
+\subsection{A Discrete Intermediate-Value Theorem}\label{sec:ivt}
+
+Because the height profile moves by single steps, it cannot skip a value: every
+height between the heights of two endpoints is realized at some intermediate
+position. This is a discrete intermediate-value theorem, proved by induction on
+the number of steps with a case analysis on the sign of each step:
+
+\begin{lemma}[\F{ivt}]\label{lem:ivt}
+Let $a + \mathit{steps} \leq m$. For every height $h$ lying between
+$\F{s}_{\mathsf h}\,a\,d$ and $\F{s}_{\mathsf h}\,(a+\mathit{steps})\,d$
+(in either order), there is a position $p$ with $a \leq p \leq a+\mathit{steps}$
+and $\F{s}_{\mathsf h}\,p\,d \equiv h$.
+\end{lemma}
+
+The name is more than analogy, though the hypotheses do not transpose verbatim.
+Over $\mathbb{N}$ every function is continuous, so reading Lemma~\ref{lem:ivt}
+as an instance of the classical statement would leave it with no hypothesis at
+all. What does the work is a Lipschitz condition: a function is Lipschitz with
+constant $K$ when $|f(x) - f(y)| \leq K\,|x-y|$ for all $x,y$, which is strictly
+stronger than continuity ($\sqrt{x}$ on $[0,1]$ is continuous but not
+Lipschitz~\cite{Bartle11}) and, on a domain whose smallest increment is $1$, says
+exactly that consecutive values lie within $K$ of each other. Here it holds with
+$K = 1$, since \F{stackStep-\ensuremath{\pm}1} makes consecutive heights differ
+by exactly one; the normalization of Section~\ref{sec:normalization} is therefore
+not a convenience here, it is the hypothesis of the lemma. Completeness of
+$\mathbb{R}$, in turn, is replaced by finiteness of the interval, so the proof is
+an induction on $\mathit{steps}$ rather than a passage to a supremum, and it
+computes the witness $p$.
+
+From \F{ivt} we extract, for a chosen height $h$ at or below a reference position
+$j$, two distinguished positions: the \emph{last} position up to $j$ at which the
+profile sits at height $h$, and the \emph{first} position from $j$ onward at which
+it does. Each comes with an extremality certificate (no later, respectively
+earlier, position in the relevant range has height $h$):
+\begin{itemize}
+\item $\F{lp}\;h$ : the last-pass position $p \leq j$ with
+$\F{s}_{\mathsf h}\,p\,d \equiv h$ and no $q \in (p,j]$ of height $h$;
+\item $\F{fp}\;h$ : the first-pass position $p \geq j$ with
+$\F{s}_{\mathsf h}\,p\,d \equiv h$ and no $q \in [j,p)$ of height $h$.
+\end{itemize}
+Their existence is supplied by \F{ivt} applied to the ascending part of the
+profile up to the peak and to the descending part after it, and the extremality
+is obtained by walking outward from the witnessed positions.
+
+\subsection{Equal Heights Force Equal Stacks}\label{sec:stackeq}
+
+The extremality of \F{lp} and \F{fp} feeds the single most useful geometric
+lemma: between two positions of \emph{equal} height that is a floor for
+everything in between, the stacks are not merely of equal length but
+\emph{identical}.
+
+\begin{lemma}[\F{stackAt-eq}]\label{lem:stackeq}
+If $a \leq b \leq m$, the heights at $a$ and $b$ are equal, and no position in
+$[a,b]$ has smaller height, then $\F{stackAt}\;a\;d \equiv \F{stackAt}\;b\;d$.
+\end{lemma}
+
+\subsection{Surface Configurations and the Two Cases}\label{sec:twocases}
+
+Let $B = \F{s}_{\mathsf h}\,j\,d$ be the peak height, where $j$ is the position of
+a global maximum of the profile, computed by a routine \F{argmax}. Set
+\[
+P \;\triangleq\; |Q|^{2}\cdot|\Gamma| \;=\; |Q \times \Gamma \times Q|,
+\qquad
+\F{pumpLen} \;\triangleq\; |Q|\cdot(|\Gamma|+1)^{\,P+1},
+\]
+the latter being the number of pairs of a state and a stack of height at most
+$P+1$ (recorded as a vector of $P+1$ optional stack symbols, with
+$\F{card\mbox{-}Cfg}$ computing it exactly). More generally we write
+$|\mathrm{Cfg}_{\leq h}|$ for the number of such pairs with stack height at most
+$h$, so that $\F{pumpLen} = |\mathrm{Cfg}_{\leq P+1}|$. Finiteness of $Q$ and
+$\Gamma$ makes both numbers computable. The pumping length will be \F{pumpLen}; the dichotomy is
+whether the peak exceeds $P+1$.
+
+\paragraph{Low case ($B \leq P+1$).}
+The whole profile is bounded by $B \leq P+1$, so every configuration along $d$
+has a stack of height at most $P+1$ and is therefore one of at most \F{pumpLen}
+distinct pairs (state, bounded stack). When $|w| > \F{pumpLen}$, the computation
+has more than \F{pumpLen} steps, hence visits more than \F{pumpLen} positions and,
+by a pigeonhole over these finitely many configurations, repeats one: there are
+positions with the same state and the very same stack. The computation between
+them is a loop returning to an identical configuration.
+
+\paragraph{High case ($B > P+1$).}
+Here we look not at full configurations but at \emph{surface} ones. To each
+stack level $g$ we associate the triple
+\[
+\big(\;\F{state at}\;\F{lp}(g),\;\;\F{top symbol at}\;\F{lp}(g),\;\;
+\F{state at}\;\F{fp}(g)\;\big)\;\in\;Q \times \Gamma \times Q,
+\]
+recording the state and exposed top symbol when the profile last leaves level $g$
+on the way up, and the state when it first returns to level $g$ on the way down.
+There are exactly $P = |Q|^{2}\cdot|\Gamma|$ such triples. Since the peak exceeds
+$P+1$, there are more than $P$ levels strictly between the base and the peak, so
+two of them, $g < h$, carry the same surface triple
+(\F{fullstate-collision}, a pigeonhole over $Q \times \Gamma \times Q$). This
+matching of surface configurations is what makes the two loops, one between the
+last passes of $g$ and $h$ on the way up and one between their first passes on
+the way down, splice together coherently.
+
+%%---------------------------------------------------------------------------
+\section{From Stack Profiles to the Pumping Lemma}\label{sec:pipeline}
+%%---------------------------------------------------------------------------
+
+Both halves are now in place: an automaton whose every step moves the stack by
+one, and a geometry that locates loops in its profile. This section turns those
+loops into the lemma.
+
+\subsection{Iterating a Loop}\label{sec:loops}
+
+Both cases reconstruct pumped computations from \emph{loops}, segments that return
+to a matching configuration, and two pieces of surgery from our trace library make
+this possible. \F{append-stack} replays a computation on top of arbitrary extra
+stack, by the invariant-suffix property of Section~\ref{sec:normal};
+\F{swap-input} replays it after an arbitrary passive input suffix, since a
+computation reads only the prefix it consumes. Together they let a loop be
+\emph{repeated}: a segment that reads $v$ and grows the stack from
+$X :: \gamma$ to $X :: (m'' \mathbin{+\!+} X :: \gamma)$ can be run $n$ times to
+read $v^{n}$ and stack $n$ copies of the block $m''$
+(\F{pump-up}); symmetrically \F{pump-down} runs a stack-shrinking loop $n$
+times to read $y^{n}$.
+
+\subsection{The Low Case: a Single Loop}\label{sec:low}
+
+In the low case the pigeonhole yields a loop whose endpoints share state
+\emph{and} stack. \F{find-loop} extracts it as a factorization of $d$ into a
+prefix $d_1$, a loop $d_2$ returning to the same configuration, and a suffix
+$d_3$ that empties the stack, together with the corresponding split
+$w = u \mathbin{+\!+} v \mathbin{+\!+} x$ of the input, where $v$ is the input
+read by $d_2$. Because the endpoints' stacks are literally equal, no
+\F{append-stack} adjustment is needed: the loop can be excised or repeated in
+place. \F{pump-from-loop} then turns this into, for every $n$, an accepting
+computation of $u \mathbin{+\!+} v^{n} \mathbin{+\!+} x$; the case function
+\F{caseLow-N} produces the five-part factorization with $y = z = \varepsilon$, the tail $x$
+above serving as its middle component:
+\[
+\begin{array}{l}
+\F{caseLow-N} \;:\; (d : \text{an accepting computation of } w) \to (p' : \knat)\\
+\quad \to (\text{every stack along } d \text{ has height at most } p')
+   \;\to\; |\mathrm{Cfg}_{\leq p'}| < |w| \\
+\quad \to \bigl(\exists\,u,v,x.\;\; w = u\,v\,x \;\wedge\; |v| > 0
+   \;\wedge\; \forall n.\; u\,v^{n}x \text{ is accepted}\bigr)\\
+\quad \uplus\;\; \bigl(\exists\, d'.\;\; d' \text{ accepts } w \text{ and }
+   \F{compLen}\;d' < \F{compLen}\;d\bigr)
+\end{array}
+\]
+The length hypothesis is stated at the height bound $p'$ actually supplied, not
+at \F{pumpLen}: the function needs only that $w$ outruns the configurations
+available below $p'$. The caller passes the peak $B$ for $p'$ and discharges the
+hypothesis from $\F{pumpLen} < |w|$ by monotonicity of $|\mathrm{Cfg}_{\leq h}|$
+in $h$ (\F{card-Cfg-mono}), which is where $B \leq P+1$ is used. The left
+disjunct is
+the factorization; the right disjunct is the shorter computation produced when
+the loop $d_2$ reads no input, discussed in Section~\ref{sec:vy} below.
+
+\subsection{The High Case: a Synchronized Double Pump}\label{sec:high}
+
+The high case is the substantial one. From the colliding levels $g < h$ we read
+off three segments of $d$, delimited by the four positions $\F{lp}(g)$, $\F{lp}(h)$,
+$\F{fp}(h)$, $\F{fp}(g)$ in this order: the ascending loop from $\F{lp}(g)$ to
+$\F{lp}(h)$ that reads $v$ and raises the stack; the middle segment from
+$\F{lp}(h)$ to $\F{fp}(h)$ that reads $x$; and the descending loop from
+$\F{fp}(h)$ to $\F{fp}(g)$ that reads $y$. The prefix before $\F{lp}(g)$ reads $u$,
+the suffix after $\F{fp}(g)$ reads $z$, and altogether
+$w = u \mathbin{+\!+} v \mathbin{+\!+} x \mathbin{+\!+} y \mathbin{+\!+} z$. Two
+applications of Lemma~\ref{lem:stackeq} give the stack equalities
+$\F{stackAt}\,\F{lp}(g) \equiv \F{stackAt}\,\F{fp}(g)$ and
+$\F{stackAt}\,\F{lp}(h) \equiv \F{stackAt}\,\F{fp}(h)$, which are what make the two
+loops compatible.
+
+The reconstruction is performed by \F{double-pump}, which, given the prefix, the
+ascending loop, the middle, the descending loop, the suffix, and an iteration
+count $n$, glues them into an accepting computation of
+$u \mathbin{+\!+} v^{n} \mathbin{+\!+} x \mathbin{+\!+} y^{n} \mathbin{+\!+} z$.
+The synchronization is the delicate part: running the ascending loop $n$ times
+stacks $n$ copies of a block $X :: m''$, and the descending loop must remove
+exactly those copies, in order, after the middle segment has run on top of them.
+The key reshaping is that the stack after reading $v^{n}$ begins with $X$, so the
+middle and descending phases can be run with the right invariant suffix beneath
+them; this is captured by a small equation $\F{rep}\;n\;(X :: m'') \mathbin{+\!+}
+X :: \delta \equiv X :: \gamma$, where $\F{rep}\;n\;t$ is $t$ repeated $n$ times,
+the $t^{n}$ of the statements above, and discharged by \F{append-stack} and
+\F{swap-input}. The bridge that turns a raw segment of $d$ into a loop of exactly
+the polymorphic shape \F{double-pump} expects is \F{segment-to-loop}, which strips
+the invariant floor from the segment and reattaches it generically.
+
+\F{caseHigh-N} has the same sum return type as \F{caseLow-N}, its left disjunct
+built from \F{double-pump}.
+
+\subsection{A Non-Empty Pumped Factor, and the Lemma for Normal
+Automata}\label{sec:vy}
+
+The pumping lemma requires $|v\,y| \geq 1$: the pumped factor must consume at
+least one input symbol, or iterating it would not change the word and the
+statement would be vacuous. In \D{IsNormalPDA\kp{+}} this is automatic: reads pop
+and $\varepsilon$-moves push, so a loop, whose endpoints have equal stack height,
+performs as many reads as $\varepsilon$-moves, and a non-empty loop therefore
+reads at least one symbol. This counting argument (\F{balance}) is how the
+textbook presentations obtain $|v\,y| \geq 1$, and how our
+\D{IsNormalPDA\kp{+}} variant \F{pda-pumping} does too.
+
+It fails for the weaker normal form \D{IsNormalPDA}, the one the construction of
+Section~\ref{sec:normalization} is obliged to target if the empty word is to be
+preserved: a loop there may consist entirely of
+$\varepsilon$-moves, pushing and popping without reading anything, and would
+consume nothing. We replace the counting argument by a \emph{minimality}
+argument. Observe that each case function already accounts for this possibility:
+its return type is a sum, and when the discovered loop consumes no input it
+returns, instead of a factorization, a strictly shorter accepting computation of
+the \emph{same} word. In the low case this shorter computation is the loop-free
+$d_1$ followed by $d_3$ (the empty loop $d_2$ is excised); in the high case it is
+$\F{double-pump}\dots 0$, the $k=0$ reconstruction, which skips the two loop
+segments and so is strictly shorter, the loops having length at least one because
+they cross stack levels. That the reconstructed computation is strictly shorter is
+discharged from \F{compLen}-preservation lemmas for the surgery operations
+(\F{compLen-swap}, \F{compLen-append}, \F{compLen-strip}, and a substitution
+lemma proved by the $J$ rule).
+
+This sets up a recursion. A long word either pumps outright, or it has a
+strictly shorter accepting computation, on which we try again. Since computation
+length is a natural number, the recursion terminates, and at the bottom the loop
+necessarily consumes input.
+
+The recursion is packaged as a generic engine (\F{pump-go}), parameterized by the
+statement $P$ to be established and by a single \emph{step} carrying out one
+round of the dichotomy. Applied to an accepting computation $d'$ of $w$, a step
+returns either $P$ itself or a second accepting computation $d''$ of the same
+$w$ with $\F{compLen}\;d'' < \F{compLen}\;d'$. The engine consumes the first
+outcome by returning it and the second by recursing on $d''$, and it is the
+\D{Acc} scheme of Section~\ref{sec:setup} that licenses the recursion: the
+recursive call is guarded by the accessibility certificate for
+$\F{compLen}\;d''$, read off the certificate for $\F{compLen}\;d'$ that the
+engine matched on. The entry point \F{pump-run} starts it from
+\F{<-wellFounded}.
+
+Instantiating the engine with the step that runs \F{argmax}, takes the dichotomy,
+and dispatches to \F{caseLow-N} or \F{caseHigh-N} gives the pumping lemma for an
+arbitrary \emph{normal} automaton:
+
+\begin{theorem}[\F{pda-pumping-N}]\label{thm:normal}
+Let $M$ be a normal pushdown automaton over finite $Q$ and $\Gamma$. For every
+$w$ with $\F{AccES}\;M\;w$ and $\F{pumpLen} < |w|$, there are $u,v,x,y,z$ with
+$w = u\,v\,x\,y\,z$, $|v\,y| \geq 1$, and
+$\F{AccES}\;M\;(u\,v^{k}\,x\,y^{k}\,z)$ for every $k$.
+\end{theorem}
+
+The \D{IsNormalPDA\kp{+}} theorem \F{pda-pumping} is the same statement with the
+counting argument in place of the recursion, and is retained as the special case
+obtained through \F{normal\kp{+}\ensuremath{\Rightarrow}normal}; building
+\F{pda-pumping-N} did not disturb it.
+
+\subsection{The End-to-End Theorem}\label{sec:end}
+
+Composing the normalization of Section~\ref{sec:normalization} with
+Theorem~\ref{thm:normal} gives the pumping lemma
+for an arbitrary pushdown automaton. The constant it produces is \F{pumpLen}
+computed from the alphabets of the \emph{normalized} automaton, not of $M$.
+Because the normalization is language-exact, the empty word needs no separate
+handling: $\varepsilon$ falls under the
+vacuous case $p < |\varepsilon| = 0$ of the quantifier, and every pumped word
+is transported back and forth through the equivalence unconditionally.
+
+\begin{theorem}[\F{pumping-pda}]\label{thm:end}
+For every pushdown automaton $M$ over finite $Q$, $T$, and $\Gamma$, there is a
+$p \in \knat$ such that for every $w \in L(M)$ with $p < |w|$ there
+are $u,v,x,y,z$ with $w = u\,v\,x\,y\,z$, $|v\,y| \geq 1$, and
+$u\,v^{k}\,x\,y^{k}\,z \in L(M)$ for every $k$.
+\end{theorem}
+
+%%---------------------------------------------------------------------------
+\section{Related Work}\label{sec:related}
+%%---------------------------------------------------------------------------
+
+The proof we formalize is due to Amarilli and Jeanmougin~\cite{Amarilli12}, who
+gave the pushdown-automata argument for the context-free pumping lemma as an
+alternative to the classical parse-tree proof of Bar-Hillel, Perles, and
+Shamir~\cite{BarHillel61}. Their account is informal; we make every step of the
+stack-profile geometry, the two-case pigeonhole, and the loop reconstructions
+explicit and machine-checked, and we add the well-founded minimality argument and
+the language-exact normalization that the informal version does not need to spell
+out.
+
+The theorem itself has been mechanized before. Ramos et
+al.~\cite{RamosPumping16} formalize the context-free pumping lemma in Rocq by the
+classical route, deriving it from a Chomsky Normal Form grammar and a long
+derivation tree, in a development of more than twenty thousand lines; they later
+put it to work, proving specific languages non-context-free and context-free
+languages not closed under intersection~\cite{RamosApplications19}. Barthwal and
+Norrish~\cite{Barthwal10,Barthwal10thesis} reach the same theorem in HOL4, within
+a substantial fragment of context-free language theory, in a classical setting
+where the witnessing functions are not extracted as programs. Three things set
+the present development apart. It argues on automata and never builds a tree, so
+the combinatorics is the geometry of a stack profile rather than the branching of
+a derivation. Its statement quantifies over an arbitrary pushdown automaton and
+mentions no grammar, in hypothesis or conclusion. And it is some 2,300 lines,
+which the shift of route, rather than any economy of style, is what buys.
+
+Mechanizations of the surrounding theory are more common. Firsov and
+Uustalu~\cite{Firsov15} certify the conversion of grammars to Chomsky Normal Form
+in Agda and~\cite{Firsov14} CYK parsing for CNF grammars, working with parse
+trees. Ramos et al.~\cite{Ramos15} formalize grammar simplification, and
+Dvo\v{r}\'{a}k and Blanchette~\cite{Dvorak23} verify closure properties of
+general grammars in Lean, using grammar-based constructions in place of the usual
+Turing-machine arguments. The recent unified Isabelle/HOL formalization of
+context-free grammar theory by Nipkow et al.~\cite{NipkowLRY-IJCAR26} covers
+normal forms and several deep theorems on the grammar side. The pumping lemma
+through pushdown automata, with a language-exact PDA normal form as we use here,
+is to our knowledge not among the existing machine-checked treatments.
+
+Pumping has also been studied formally for its own sake, and on the regular side
+constructively. Doczkal, Kaiser and Smolka~\cite{Doczkal13} develop a constructive
+theory of regular languages in Rocq, the pumping lemma among its results, in some
+1,400 lines of Ssreflect, later extended to a systematic account of regular
+language representations~\cite{DoczkalSmolka18}. Hobor, Li and
+Stephan~\cite{Hobor19} formalize the pumping properties of Jaffe and of
+Ehrenfeucht, Parikh and Rozenberg, and find that the classical proof that block
+cancellation implies regularity appeals to the axiom of choice; they give a proof
+that does not. Their concern is ours one level up: a constructive reading of a
+pumping statement has to produce its witnesses, which is why our factorization is
+computed rather than asserted and why the non-emptiness of the pumped factor
+costs a well-founded recursion (Section~\ref{sec:vy}) instead of a counting
+argument. Certified parsing of regular expressions~\cite{Lopes16,Cardoso23} is a
+complementary line sharing our broader goal of a verified language-theory
+library.
+
+%% ---------------------------------------------------------------------------
+\section{Conclusion}\label{sec:conclusion}
+%%---------------------------------------------------------------------------
+
+We have presented a complete, machine-checked Agda formalization of the pumping
+lemma for context-free languages by the pushdown-automaton route, stated directly
+about the empty-stack language of an arbitrary automaton. Its core is a $\pm 1$
+normal form, reached by a language-exact normalization, whose stack profile
+admits a discrete intermediate-value theorem and a pigeonhole over surface
+configurations, and a well-founded recursion securing a non-empty pumped factor
+where the textbook counting argument does not apply.
+
+The development is sixteen modules and some $2{,}300$ non-blank, non-comment
+lines on top of a small library of general-purpose utilities, with no postulates,
+termination pragmas, or unfinished goals. Its cost is concentrated in the high case, which an \Kw{opaque}
+interface around the assembled witnesses keeps from being re-elaborated
+downstream.
+
+Nothing in the stack-profile layer mentions pumping, and it is the part most
+likely to outlive the theorem proved here. In future work we intend to reuse it,
+as it stands, for three results. The first is \emph{Ogden's lemma}, which demands
+that the pumped factors carry a marked position: the pigeonhole of
+Section~\ref{sec:twocases} would range only over crossings that still have marked
+input ahead of them, forcing the loop it returns to consume a mark, while the
+geometry itself stays untouched. The second is \emph{pumping downwards}, since
+the shortening step of Section~\ref{sec:vy} already bounds the shortest accepted
+word, which is what emptiness and finiteness procedures stated on the automaton
+would rest on. The third is the \emph{grammar-level statement} of the pumping
+lemma, reached through the standard grammar-to-PDA construction.
+
+All source code, and instructions on how to build it, are available
+online~\cite{repo}.
+
+\begin{credits}
+\subsubsection{\ackname}
+The author thanks the anonymous reviewers for their helpful comments.
+
+\subsubsection{\discintname}
+The author has no competing interests to declare that are relevant to the
+content of this article.
+\end{credits}
+
+%%---------------------------------------------------------------------------
+\bibliographystyle{splncs04}
+\bibliography{references}
+
+%%---------------------------------------------------------------------------
+\newpage
+\appendix
+%%---------------------------------------------------------------------------
+\section{Proofs}\label{app:proofs}
+%%---------------------------------------------------------------------------
+
+For the reader's convenience each statement is repeated before its proof. Except
+in the first, the notation is that of Section~\ref{sec:geometry}: $M$ is a normal
+automaton, $d$ an accepting computation of length $m$, and
+$\F{s}_{\mathsf h}\,k\,d$ the stack height at position $k$.
+
+\medskip
+\noindent\textbf{Theorem~\ref{thm:normalize} (\F{normalize}).}
+\emph{Let $M$ be a pushdown automaton over finite $Q$, $T$ and $\Gamma$. The
+automaton $M'$ of Section~\ref{sec:construction} is normal, its state type is
+finite, and $L(M') = L(M)$.}
+\begin{proof}
+Normality is read off the five rules: each is a pop, replacing the top symbol by
+the empty string, or a push of one symbol above the restored top. Finiteness of
+$Q'$ follows from that of $Q$, $\Gamma$ and $T$, since a transition $\tau$ is
+determined by a state, an optional input symbol, a top symbol and an index into
+the list $\delta$ returns for them.
+
+The equivalence is a step-by-step bisimulation organized around the stack
+invariant: whenever $M$ is in state $q$ with stack $s$, the simulation is in
+$\langle q\rangle$ with $s$ encoded above the marker. Completeness
+(\F{normalize-complete}) is by induction on a computation of $M$, replacing each
+transition by its macro and the start and end by the marker push and pop; an
+$\varepsilon$-computation of $M$ becomes an $\varepsilon$-computation of $M'$, so
+the empty word is preserved. Soundness (\F{normalize-sound}) inverts each macro
+by four mutually recursive functions that follow $M'$ structurally, using the
+non-emptiness of the intermediate stacks to rule out spurious base cases; a stack
+invariant on the push-slicing states $\langle\tau\rangle$ and
+$\langle\tau,j\rangle$ tracks how far a macro has progressed. \qed
+\end{proof}
+
+\medskip
+\noindent\textbf{Lemma~\ref{lem:stackeq} (\F{stackAt-eq}).}
+\emph{If $a \leq b \leq m$, the heights at $a$ and $b$ are equal, and no position
+in $[a,b]$ has smaller height, then
+$\F{stackAt}\;a\;d \equiv \F{stackAt}\;b\;d$.}
+\begin{proof}
+The segment from $a$ to $b$ never descends below the common height, so the stack
+present at $a$ is an invariant suffix throughout: by the push-preserves-tail
+property of normal steps it is carried unchanged to $b$ as a suffix of
+$\F{stackAt}\;b\;d$. Since the two stacks have the same length, the part above
+the suffix is empty, and the stacks coincide. \qed
+\end{proof}
+
+\medskip
+\noindent\textbf{Theorem~\ref{thm:normal} (\F{pda-pumping-N}).}
+\emph{Let $M$ be a normal pushdown automaton over finite $Q$ and $\Gamma$. For
+every $w \in L(M)$ with $\F{pumpLen} < |w|$, there are $u,v,x,y,z$
+with $w = u\,v\,x\,y\,z$, $|v\,y| \geq 1$, and
+$u\,v^{k}\,x\,y^{k}\,z \in L(M)$ for every $k$.}
+\begin{proof}
+By \F{pump-run} on the input computation. Each round computes the peak via
+\F{argmax} and branches on $B \leq P+1$. The low branch calls \F{caseLow-N},
+whose left disjunct is converted to the five-part shape by taking
+$y = z = \varepsilon$ (so $u\,v^{k}\,x\,y^{k}\,z$ collapses to $u\,v^{k}\,x$,
+matching the disjunct's word after rewriting $\F{rep}\;k\;[] = []$), and whose
+right disjunct is fed back to the recursion; the high branch calls
+\F{caseHigh-N} similarly. Termination is the well-founded recursion on
+\F{compLen} of Section~\ref{sec:vy}; at every leaf the discovered loop consumes
+input, so $|v\,y| \geq 1$. \qed
+\end{proof}
+
+\medskip
+\noindent\textbf{Theorem~\ref{thm:end} (\F{pumping-pda}).}
+\emph{For every pushdown automaton $M$ over finite $Q$, $T$, and $\Gamma$, there
+is a $p \in \knat$ such that for every $w \in L(M)$ with $p < |w|$
+there are $u,v,x,y,z$ with $w = u\,v\,x\,y\,z$, $|v\,y| \geq 1$, and
+$u\,v^{k}\,x\,y^{k}\,z \in L(M)$ for every $k$.}
+\begin{proof}
+Normalize $M$ to $M'$, with the language equivalence and the finiteness of its
+state and stack alphabets. Take $p = \F{pumpLen}$ computed from those sizes. Given
+$w \in L(M)$ with $p < |w|$, transport it to $w \in L(M')$ by
+completeness, apply Theorem~\ref{thm:normal} to obtain the factorization and the
+per-$k$ memberships $u\,v^{k}\,x\,y^{k}\,z \in L(M')$, and transport each
+back to $M$ by soundness. \qed
+\end{proof}
+
+% \medskip
+% \noindent In Agda the statement is the following type, which under the
+% Curry-Howard correspondence \emph{is} the pumping lemma: the nested
+% \kSigma{}-types bind the pumping length and the factorization, and the
+% conjunction states its two properties.
+% \begin{spec}
+% \F{pumping-pda} : (\V{finQ} : \F{Finite} \V{Q}) (\V{finT} : \F{Finite} \V{T}) (\V{fin\kg{}} : \F{Finite} \V{\kg{}})
+%              (\V{M} : \D{PDA} \V{Q} \V{T} \V{\kg{}})
+%    \kto{} \D{\kSigma{}} \kla{} (\V{p} : \knat{}) \kto{} \kfa{} \{\V{w}\} \kto{} \F{AccES} \V{M} \V{w} \kto{} \V{p} \klt{} \F{length} \V{w}
+%    \kto{} \D{\kSigma{}}[ \V{u} ] \D{\kSigma{}}[ \V{v} ] \D{\kSigma{}}[ \V{x} ] \D{\kSigma{}}[ \V{y} ] \D{\kSigma{}}[ \V{z} ] \V{w} \keq{} \V{u} ++ \V{v} ++ \V{x} ++ \V{y} ++ \V{z}
+%          \ktimes{} 0 \klt{} \F{length} \V{v} \F{+} \F{length} \V{y}
+%          \ktimes{} (\kfa{} \V{k} \kto{} \F{AccES} \V{M} (\V{u} ++ \F{rep} \V{k} \V{v} ++ \V{x} ++ \F{rep} \V{k} \V{y} ++ \V{z}))
+% \end{spec}
+
+\end{document}
