@@ -97,7 +97,7 @@ Lemma for Context-Free Languages via Pushdown Automata}
   language, the empty word included; a well-founded recursion on the length of
   the computation that secures a non-empty pumped factor; and a search over the
   nested sub-computations of the run that bounds $|v\,x\,y|$. As an application,
-  we prove in Agda that $\{a^{n}b^{n}c^{n}\}$ is not accepted by any pushdown
+  we prove in Agda that $\{a^{n}b^{n}c^{n}\,|\,n\geq 0\}$ is not accepted by any pushdown
   automaton.
 
 \keywords{Pumping lemma \and Pushdown automata \and Context-free
@@ -170,7 +170,7 @@ that standard equivalence. Its formalization is future work
 \item The pumping lemma with all its conditions, $|v\,y| \geq 1$ and
   $|v\,x\,y| \leq p$ included, for an arbitrary PDA, with total functions
   rebuilding every pumped computation (Section~\ref{sec:pipeline}), and its use
-  to prove that $\{a^{n}b^{n}c^{n}\}$ is not a PDA language
+  to prove that $\{a^{n}b^{n}c^{n}\,|\,n\geq 0\}$ is not a PDA language
   (Section~\ref{sec:application}).
 \end{itemize}
 
@@ -267,7 +267,8 @@ automaton can read all of it and empty its stack, in any state
 (\agdalink{PDA/Language.agda}{15}{AccES}):
 \begin{spec}
 \F{AccES} : \D{PDA} \V{Q} \V{T} \V{\kG{}} \kto{} \D{List} \V{T} \kto{} \D{Set}
-\F{AccES} \V{M} \V{w} = \D{\kSigma{}} \kla{} (\V{q} : \V{Q}) \kto{} \V{M} \kpda{} (\V{M} \F{.q\ks{0}} , \V{w} , \V{M} \F{.z\ks{0}} :: []) \kpRas{} (\V{q} , [] , [])
+\F{AccES} \V{M} \V{w}
+   = \D{\kSigma{}} \kla{} (\V{q} : \V{Q}) \kto{} \V{M} \kpda{} (\V{M} \F{.q\ks{0}} , \V{w} , \V{M} \F{.z\ks{0}} :: []) \kpRas{} (\V{q} , [] , [])
 \end{spec}
 We write $L(M) = \{\,w \mid \F{AccES}\;M\;w\,\}$ for the language of $M$.
 
@@ -723,7 +724,7 @@ is tight, and for applications of the lemma, which only use the existence of
 $p$, their size is irrelevant.
 
 %%---------------------------------------------------------------------------
-\section{Application: $\{a^{n}b^{n}c^{n}\}$ is not a PDA Language}\label{sec:application}
+\section{Application: $\{a^{n}b^{n}c^{n}\,|\,n\geq 0\}$ is not a PDA Language}\label{sec:application}
 %%---------------------------------------------------------------------------
 
 The usual application of the lemma is to show that a language is not
