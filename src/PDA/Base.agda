@@ -1,6 +1,5 @@
 module PDA.Base where
 
-open import Data.Bool using (Bool; true; false)
 open import Data.List using (List; []; _∷_; _++_)
 open import Data.Maybe using (Maybe; just; nothing)
 open import Data.Product using (_×_; _,_; ∃; ∃-syntax)
@@ -24,7 +23,6 @@ record PDA (Q T Γ : Set) : Set where
     δ : Q → Maybe T → Γ → List (Q × List Γ)
     q₀ : Q -- initial state
     z₀ : Γ -- initial stack symbol
-    isFinal : Q → Bool -- predicate for final states
 
 open PDA public
 

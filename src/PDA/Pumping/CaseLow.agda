@@ -212,7 +212,7 @@ caseLow-N : {Q T Γ : Set} {M : PDA Q T Γ}
           → (∃ λ u → ∃ λ v → ∃ λ x
                → w ≡ u ++ v ++ x × 0 < length v
                × (∀ n → M ⊢ₚ (q₀ , u ++ rep n v ++ x , z ∷ []) ⟹* (q_f , [] , [])))
-          ⊎ (∃ λ q' → Σ (M ⊢ₚ (q₀ , w , z ∷ []) ⟹* (q' , [] , []))
+          ⊎ (Σ (M ⊢ₚ (q₀ , w , z ∷ []) ⟹* (q_f , [] , []))
                         λ d' → compLen d' < compLen d)
 caseLow-N {M = M} finQ finΓ {q₀} {q_f} {w} {z} d p' hb cardlt
   with find-loop finQ finΓ d p' hb
@@ -223,7 +223,7 @@ caseLow-N {M = M} finQ finΓ {q₀} {q_f} {w} {z} d p' hb cardlt
       inj₁ (consumed d₁ , consumed d₂ , consumed d₃
            , trans (accepted-word d) weq , pos-v
            , pump-from-loop d₁ d₂ d₃ qeq seq)
-... | inj₂ v≡[] = inj₂ (q_f , shorter , compLen<)
+... | inj₂ v≡[] = inj₂ (shorter , compLen<)
   where
     inputeq : inputOf A ≡ inputOf B
     inputeq = trans (consumed-correct d₂) (cong (_++ inputOf B) v≡[])

@@ -161,7 +161,7 @@ module _ {Q T Γ : Set}
 
  -- The normalized PDA, under empty-stack acceptance.
  M′ : PDA State T (Maybe Γ)
- M′ = record { δ = δ′ ; q₀ = Init ; z₀ = nothing ; isFinal = λ _ → false }
+ M′ = record { δ = δ′ ; q₀ = Init ; z₀ = nothing }
 
  -- ────────────────────────────────────────────────────────────────
  -- M′ is IsNormalPDA (every step is a pop β≡[] or a push β≡X∷Z∷[])

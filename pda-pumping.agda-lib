@@ -1,3 +1,4 @@
 name: pda-pumping
 include: src
 depend: standard-library-2.2
+flags: --safe

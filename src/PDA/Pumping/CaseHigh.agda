@@ -69,7 +69,7 @@ caseHigh-N : {Q T Γ : Set} {M : PDA Q T Γ} {q₀ q_f : Q} {w : List T} {z₀ :
                × (0 < length vw + length yw)
                × (∀ n → M ⊢ₚ (q₀ , uw ++ rep n vw ++ xw ++ rep n yw ++ zw , z₀ ∷ [])
                            ⟹* (q_f , [] , [])))
-           ⊎ (∃ λ q' → Σ (M ⊢ₚ (q₀ , w , z₀ ∷ []) ⟹* (q' , [] , []))
+           ⊎ (Σ (M ⊢ₚ (q₀ , w , z₀ ∷ []) ⟹* (q_f , [] , []))
                          λ d' → compLen d' < compLen d)
 caseHigh-N {M = M} {q₀ = q₀} {q_f = q_f} {w = w} {z₀ = z₀} norm finQ finΓ d j j≤cl g₀ p' 1≤g₀ bnd card≤p' =
   result
@@ -81,11 +81,11 @@ caseHigh-N {M = M} {q₀ = q₀} {q_f = q_f} {w = w} {z₀ = z₀} norm finQ fin
                 × (0 < length vw₁ + length yw₁)
                 × (∀ n → M ⊢ₚ (q₀ , uw₁ ++ rep n vw₁ ++ xw₁ ++ rep n yw₁ ++ zw₁ , z₀ ∷ [])
                             ⟹* (q_f , [] , [])))
-             ⊎ (∃ λ q' → Σ (M ⊢ₚ (q₀ , w , z₀ ∷ []) ⟹* (q' , [] , []))
+             ⊎ (Σ (M ⊢ₚ (q₀ , w , z₀ ∷ []) ⟹* (q_f , [] , []))
                            λ d' → compLen d' < compLen d)
     result with sumNil vw yw
     ... | inj₁ pos = inj₁ (uw , vw , xw , yw , zw , wdecomp , pos , dp)
-    ... | inj₂ (vw≡[] , yw≡[]) = inj₂ (q_f , shorter , compLen<)
+    ... | inj₂ (vw≡[] , yw≡[]) = inj₂ (shorter , compLen<)
       where
         inputeq0 : w ≡ uw ++ rep 0 vw ++ xw ++ rep 0 yw ++ zw
         inputeq0 = trans wdecomp (cong₂ (λ a b → uw ++ a ++ xw ++ b ++ zw) vw≡[] yw≡[])

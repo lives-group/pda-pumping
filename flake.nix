@@ -81,9 +81,9 @@
         };
 
         # ---------------------------------------------------------------
-        # Type-checking the formalization.  Arbitrary.agda is the root:
-        # it transitively pulls in the other 21 modules and ends in
-        # pumping-pda, the end-to-end theorem.
+        # Type-checking the formalization.  Everything.agda is the root:
+        # it imports every theorem of the paper, and with it every module
+        # (pda-pumping.agda-lib checks all of them with --safe).
         # ---------------------------------------------------------------
         formalization = pkgs.stdenvNoCC.mkDerivation {
           pname = "pda-pumping-formalization";
@@ -101,7 +101,7 @@
             # pda-pumping.agda-lib supplies the include path and the
             # standard-library-2.2 dependency; the agda wrapper supplies
             # --library-file, so neither must be overridden here.
-            agda src/PDA/Pumping/Arbitrary.agda
+            agda +RTS -M28G -c -RTS src/Everything.agda
             runHook postBuild
           '';
           installPhase = ''
@@ -124,7 +124,7 @@
           packages = [ agdaWithStdlib texenv pkgs.poppler_utils ];
           shellHook = ''
             echo "pda-pumping dev shell"
-            echo "  check the formalization:  agda -i src src/PDA/Pumping/Arbitrary.agda"
+            echo "  check the formalization:  agda src/Everything.agda"
             echo "  build the paper:          cd paper && pdflatex paper && bibtex paper && pdflatex paper && pdflatex paper"
           '';
         };
