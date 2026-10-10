@@ -28,9 +28,10 @@
 \newcommand{\Kw}[1]{\textbf{#1}}                % keyword
 
 %% -- Links to the formalization ----------------------------------------------
-%% \agdarev is the revision the links point to; it is set to the release tag
-%% of the artifact accompanying this paper.
-\newcommand{\agdarev}{main}
+%% \agdarev is the revision the links point to: the commit of the artifact
+%% accompanying this paper, so that the line numbers below stay valid when the
+%% repository moves on.  Update it (and the line numbers) when src/ changes.
+\newcommand{\agdarev}{9ac99a00bb1dc0047eca6ac9ab8f15585acb3577}
 \newcommand{\agdarepo}{https://github.com/lives-group/pda-pumping/blob/\agdarev/src}
 %% \agdalink{file}{line}{identifier}
 \newcommand{\agdalink}[3]{\href{\agdarepo/#1\#L#2}{\F{#3}}}
